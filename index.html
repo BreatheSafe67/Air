@@ -43,7 +43,6 @@ button:disabled{opacity:.6}
   <div class="note">ข้อมูลจากแบบจำลองคุณภาพอากาศ (Open-Meteo / CAMS) ความละเอียดราว 11 กม. ไม่ใช่ค่าจากเครื่องวัดตรงจุดที่ยืน ใช้ประกอบการตัดสินใจเท่านั้น<br>เกณฑ์สี PM2.5 อิงเกณฑ์ดัชนีคุณภาพอากาศของไทย ส่วน US AQI เป็นเกณฑ์สหรัฐฯ</div>
 </main>
 <script>
-// เกณฑ์ PM2.5 (µg/m3) ตามดัชนีคุณภาพอากาศไทย
 const LEVELS=[
  {max:15,  c:"#1ea7e1", t:"อากาศดีมาก", tip:"ทำกิจกรรมกลางแจ้งได้ตามปกติ"},
  {max:25,  c:"#2eb872", t:"อากาศดี",     tip:"ทำกิจกรรมกลางแจ้งได้ตามปกติ"},
@@ -51,7 +50,6 @@ const LEVELS=[
  {max:75,  c:"#f07a1a", t:"เริ่มมีผลต่อสุขภาพ", tip:"แนะนำสวมหน้ากากเมื่ออยู่กลางแจ้ง"},
  {max:1e9, c:"#e03a3a", t:"มีผลต่อสุขภาพ", tip:"ควรลดกิจกรรมกลางแจ้งและสวมหน้ากาก N95"}
 ];
-// เกณฑ์ US AQI
 const AQI=[
  {max:50, c:"#2eb872", t:"ดี"},
  {max:100,c:"#e0a800", t:"ปานกลาง"},
@@ -77,14 +75,11 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 function getJSON(url,ms){
   const ac=new AbortController(), t=setTimeout(()=>ac.abort(),ms||12000);
   return fetch(url,{signal:ac.signal}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).finally(()=>clearTimeout(t));
-}
-
-function render(data){
+}function render(data){
   const d=data.current, h=data.hourly;
   const L=lv(d.pm2_5), A=aq(d.us_aqi);
   document.documentElement.style.setProperty("--c",L.c);
 
-  // หาสารที่ทำให้ US AQI สูงสุด
   let dom=null;
   POLL.forEach(p=>{const v=d[p.k]; if(v!=null&&(dom==null||v>dom.v)) dom={v:v,n:p.n,dust:p.dust};});
   let why="";
@@ -94,7 +89,6 @@ function render(data){
     else why="ค่ารวมสูงเพราะ"+dom.n+" (ไม่ใช่ฝุ่น) ส่วนฝุ่น PM2.5 อยู่ที่ระดับ \""+L.t+"\"";
   }
 
-  // กราฟ PM2.5 รายชั่วโมงของวันนี้
   let chart="";
   if(h&&h.pm2_5&&h.time){
     const vals=h.pm2_5, nowKey=d.time.slice(0,13);
@@ -119,4 +113,49 @@ function render(data){
     '</div>'+
     '<div class="box"><h2>ภาพรวมทุกสารมลพิษ (US AQI)</h2>'+
     '<span class="pill" style="background:'+A.c+'">'+fmt(d.us_aqi)+' · '+A.t+'</span>'+
-    '<div style="margin-top:8px;color:var(--sub)">'+esc(why)+'</div>
+    '<div style="margin-top:8px;color:var(--sub)">'+esc(why)+'</div></div>'+
+    chart;
+}
+
+function uniq(a){return a.filter((x,i)=>x&&a.indexOf(x)===i);}
+
+async function load(){
+  const btn=$("refresh");
+  btn.disabled=true;
+  $("out").innerHTML='<div class="msg">กำลังหาตำแหน่งของคุณ…</div>';
+  if(!navigator.geolocation){
+    $("out").innerHTML='<div class="msg">เบราว์เซอร์นี้ไม่รองรับการระบุตำแหน่ง</div>';btn.disabled=false;return;
+  }
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const lat=pos.coords.latitude, lon=pos.coords.longitude;
+    try{
+      const cur=["us_aqi","pm2_5","pm10","ozone","nitrogen_dioxide","carbon_monoxide"].concat(POLL.map(p=>p.k));
+      const url="https://air-quality-api.open-meteo.com/v1/air-quality?latitude="+lat+"&longitude="+lon+
+        "&current="+uniq(cur).join(",")+"&hourly=pm2_5&forecast_days=1&timezone=auto";
+      const data=await getJSON(url);
+      render(data);
+      const stamp="อัปเดต "+data.current.time.replace("T"," ")+" น.";
+      $("place").textContent=stamp;
+      getJSON("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude="+lat+"&longitude="+lon+"&localityLanguage=th",8000)
+        .then(j=>{
+          const name=uniq([j.locality,j.city,j.principalSubdivision]).slice(0,2).join(", ");
+          if(name) $("place").textContent="📍 "+name+" · "+stamp;
+        }).catch(()=>{});
+    }catch(e){
+      $("out").innerHTML='<div class="msg">โหลดข้อมูลไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วกดรีเฟรชอีกครั้ง</div>';
+    }
+    btn.disabled=false;
+  },err=>{
+    const m=err&&err.code===1
+      ?'ไม่ได้รับอนุญาตให้ใช้ตำแหน่ง<br>โปรดเปิดการอนุญาตตำแหน่งสำหรับเบราว์เซอร์แล้วกดรีเฟรช'
+      :'หาตำแหน่งของคุณไม่เจอ<br>ตรวจสอบว่าเปิดบริการตำแหน่งที่ตั้งและอินเทอร์เน็ตอยู่ แล้วกดรีเฟรช';
+    $("out").innerHTML='<div class="msg">'+m+'</div>';
+    btn.disabled=false;
+  },{enableHighAccuracy:false,timeout:15000,maximumAge:300000});
+}
+$("refresh").onclick=load;
+load();
+setInterval(load,600000);
+</script>
+</body>
+</html>
