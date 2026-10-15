@@ -65,6 +65,10 @@ button.ghost{background:var(--card);color:var(--text);border:1px solid var(--lin
   <div class="note">ข้อมูลจากแบบจำลองคุณภาพอากาศ (Open-Meteo / CAMS) ความละเอียดราว 11 กม. ไม่ใช่ค่าจากเครื่องวัดตรงจุด อำเภอที่อยู่ใกล้กันมากอาจได้ค่าเท่ากัน ใช้ประกอบการตัดสินใจเท่านั้น<br>เกณฑ์สี PM2.5 อิงเกณฑ์ดัชนีคุณภาพอากาศของไทย ส่วน US AQI เป็นเกณฑ์สหรัฐฯ<br>ชื่อสถานที่จาก OpenStreetMap (Nominatim) และ Open-Meteo Geocoding</div>
 </main>
 <script>
+window.addEventListener("error",function(e){
+  var o=document.getElementById("out");
+  if(o) o.innerHTML='<div class="msg">เกิดข้อผิดพลาดของสคริปต์:<br>'+String(e.message)+'</div>';
+});
 const LEVELS=[
  {max:15,  c:"#1ea7e1", t:"อากาศดีมาก", tip:"ทำกิจกรรมกลางแจ้งได้ตามปกติ"},
  {max:25,  c:"#2eb872", t:"อากาศดี",     tip:"ทำกิจกรรมกลางแจ้งได้ตามปกติ"},
@@ -192,4 +196,63 @@ function useGPS(){
 
 /* ---------- ค้นหาสถานที่ ---------- */
 async function searchNominatim(q){
-  const
+  const url="https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&countrycodes=th&accept-language=th&q="+encodeURIComponent(q);
+  const j=await getJSON(url,10000);
+  return j.map(x=>{
+    const a=x.address||{};
+    const title=x.name||x.display_name.split(",")[0];
+    const sub=uniq([a.suburb||a.village||a.neighbourhood, a.city_district||a.county||a.city||a.town, a.state]).filter(s=>s!==title).join(" · ");
+    return {name:title,sub:sub,lat:+x.lat,lon:+x.lon,type:x.addresstype||x.type};
+  });
+}
+async function searchOpenMeteo(q){
+  const url="https://geocoding-api.open-meteo.com/v1/search?count=10&language=th&countryCode=TH&name="+encodeURIComponent(q);
+  const j=await getJSON(url,10000);
+  return (j.results||[]).map(x=>({
+    name:x.name,
+    sub:uniq([x.admin3,x.admin2,x.admin1]).filter(s=>s!==x.name).join(" · "),
+    lat:x.latitude,lon:x.longitude,type:x.feature_code
+  }));
+}
+
+function showResults(list){
+  const box=$("results");
+  if(!list.length){
+    box.innerHTML='<div class="empty">ไม่พบสถานที่นี้ ลองพิมพ์ชื่ออำเภอตามด้วยจังหวัด เช่น "แม่สาย เชียงราย" หรือลองสะกดใหม่</div>';
+    return;
+  }
+  box.innerHTML=list.map((r,i)=>'<button type="button" class="r" data-i="'+i+'">'+esc(r.name)+(r.sub?'<small>'+esc(r.sub)+'</small>':'')+'</button>').join("");
+  box.onclick=e=>{
+    const b=e.target.closest(".r"); if(!b) return;
+    const r=list[+b.dataset.i];
+    const name=r.name+(r.sub?" · "+r.sub.split(" · ").pop():"");
+    box.innerHTML="";
+    $("q").value=r.name;
+    show({lat:r.lat,lon:r.lon,name:name,gps:false});
+  };
+}
+
+$("sf").onsubmit=async e=>{
+  e.preventDefault();
+  const q=$("q").value.trim();
+  if(!q) return;
+  $("results").innerHTML='<div class="empty">กำลังค้นหา…</div>';
+  let list=[];
+  try{ list=await searchNominatim(q); }catch(err){}
+  if(!list.length){ try{ list=await searchOpenMeteo(q); }catch(err){} }
+  showResults(list);
+};
+
+$("gps").onclick=useGPS;
+$("refresh").onclick=()=>{ if(cur&&!cur.gps) show(cur); else useGPS(); };
+
+/* เริ่มต้น: ใช้สถานที่ที่เลือกครั้งก่อน ถ้าไม่มีก็ใช้ตำแหน่งปัจจุบัน */
+(function init(){
+  let last=null;
+  try{ last=JSON.parse(localStorage.getItem("dust_last")||"null"); }catch(e){}
+  if(last&&!last.gps&&isFinite(last.lat)&&isFinite(last.lon)){ show(last); } else { useGPS(); }
+})();
+setInterval(()=>{ if(cur&&!cur.gps) show(cur); },600000);
+</script>
+</body>
+</html>
