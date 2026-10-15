@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ค่าฝุ่นรอบตัวคุณ</title>
 <style>
-:root{--bg:#f4f6f8;--card:#fff;--text:#1b2733;--sub:#5f6f7e;--c:#999}
+:root{--bg:#f4f6f8;--card:#fff;--text:#1b2733;--sub:#5f6f7e;--c:#999;--line:rgba(128,128,128,.25)}
 @media(prefers-color-scheme:dark){:root{--bg:#10161c;--card:#1a232c;--text:#e8eef3;--sub:#93a3b1}}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;justify-content:center;padding:20px}
 main{width:100%;max-width:440px}
 h1{font-size:18px;margin:0 0 4px}
-.place{color:var(--sub);font-size:14px;margin-bottom:16px;min-height:20px}
+.place{color:var(--sub);font-size:14px;margin-bottom:16px;min-height:20px;line-height:1.4}
 .card{background:var(--card);border-radius:20px;padding:24px;text-align:center;border-top:8px solid var(--c);box-shadow:0 2px 10px rgba(0,0,0,.08)}
 .big{font-size:72px;font-weight:700;line-height:1;color:var(--c)}
 .unit{color:var(--sub);font-size:14px;margin-top:4px}
@@ -21,9 +21,17 @@ h1{font-size:18px;margin:0 0 4px}
 .mini{background:var(--card);border-radius:14px;padding:12px 6px;text-align:center}
 .mini b{display:block;font-size:20px}
 .mini span{font-size:12px;color:var(--sub)}
+.box{background:var(--card);border-radius:14px;padding:14px;margin-top:14px;font-size:14px;line-height:1.5}
+.box h2{font-size:14px;margin:0 0 8px;color:var(--sub);font-weight:600}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;color:#fff;font-weight:600;font-size:13px}
+.bars{display:flex;align-items:flex-end;gap:2px;height:70px}
+.bars i{flex:1;border-radius:3px 3px 0 0;min-height:3px}
+.bars i.now{outline:2px solid var(--text);outline-offset:1px}
+.axis{display:flex;justify-content:space-between;font-size:11px;color:var(--sub);margin-top:4px}
 button{margin-top:16px;width:100%;padding:14px;border:0;border-radius:12px;font-size:16px;background:#2f80ed;color:#fff}
+button:disabled{opacity:.6}
 .note{font-size:12px;color:var(--sub);margin-top:14px;line-height:1.5}
-.msg{padding:30px 10px;color:var(--sub)}
+.msg{padding:30px 10px;color:var(--sub);line-height:1.6}
 </style>
 </head>
 <body>
@@ -32,58 +40,83 @@ button{margin-top:16px;width:100%;padding:14px;border:0;border-radius:12px;font-
   <div class="place" id="place"></div>
   <div id="out"><div class="msg">กำลังหาตำแหน่งของคุณ… (กดอนุญาตการเข้าถึงตำแหน่ง)</div></div>
   <button id="refresh">รีเฟรช</button>
-  <div class="note">ข้อมูลจากแบบจำลองคุณภาพอากาศ (Open-Meteo / CAMS) ความละเอียดราว 11 กม. ไม่ใช่ค่าจากเครื่องวัดตรงจุดที่ยืน ใช้ประกอบการตัดสินใจเท่านั้น<br>เกณฑ์สี PM2.5 อิงเกณฑ์ดัชนีคุณภาพอากาศของไทย</div>
+  <div class="note">ข้อมูลจากแบบจำลองคุณภาพอากาศ (Open-Meteo / CAMS) ความละเอียดราว 11 กม. ไม่ใช่ค่าจากเครื่องวัดตรงจุดที่ยืน ใช้ประกอบการตัดสินใจเท่านั้น<br>เกณฑ์สี PM2.5 อิงเกณฑ์ดัชนีคุณภาพอากาศของไทย ส่วน US AQI เป็นเกณฑ์สหรัฐฯ</div>
 </main>
 <script>
+// เกณฑ์ PM2.5 (µg/m3) ตามดัชนีคุณภาพอากาศไทย
 const LEVELS=[
  {max:15,  c:"#1ea7e1", t:"อากาศดีมาก", tip:"ทำกิจกรรมกลางแจ้งได้ตามปกติ"},
  {max:25,  c:"#2eb872", t:"อากาศดี",     tip:"ทำกิจกรรมกลางแจ้งได้ตามปกติ"},
- {max:37.5,c:"#f2b807", t:"ปานกลาง",     tip:"กลุ่มเสี่ยงควรลดกิจกรรมกลางแจ้งนานๆ"},
+ {max:37.5,c:"#e0a800", t:"ปานกลาง",     tip:"กลุ่มเสี่ยงควรลดกิจกรรมกลางแจ้งนานๆ"},
  {max:75,  c:"#f07a1a", t:"เริ่มมีผลต่อสุขภาพ", tip:"แนะนำสวมหน้ากากเมื่ออยู่กลางแจ้ง"},
  {max:1e9, c:"#e03a3a", t:"มีผลต่อสุขภาพ", tip:"ควรลดกิจกรรมกลางแจ้งและสวมหน้ากาก N95"}
 ];
+// เกณฑ์ US AQI
+const AQI=[
+ {max:50, c:"#2eb872", t:"ดี"},
+ {max:100,c:"#e0a800", t:"ปานกลาง"},
+ {max:150,c:"#f07a1a", t:"ไม่ดีต่อกลุ่มเสี่ยง"},
+ {max:200,c:"#e03a3a", t:"ไม่ดีต่อสุขภาพ"},
+ {max:300,c:"#8f3f97", t:"แย่มาก"},
+ {max:1e9,c:"#7e0023", t:"อันตราย"}
+];
+const POLL=[
+ {k:"us_aqi_pm2_5",n:"ฝุ่น PM2.5",dust:true},
+ {k:"us_aqi_pm10",n:"ฝุ่น PM10",dust:true},
+ {k:"us_aqi_ozone",n:"โอโซน",dust:false},
+ {k:"us_aqi_nitrogen_dioxide",n:"ก๊าซ NO₂",dust:false},
+ {k:"us_aqi_sulphur_dioxide",n:"ก๊าซ SO₂",dust:false},
+ {k:"us_aqi_carbon_monoxide",n:"ก๊าซ CO",dust:false}
+];
 const $=id=>document.getElementById(id);
-const level=v=>LEVELS.find(l=>v<=l.max);
+const lv=v=>LEVELS.find(l=>v<=l.max);
+const aq=v=>AQI.find(l=>v<=l.max);
 const fmt=v=>v==null?"–":Math.round(v*10)/10;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-async function load(){
-  $("out").innerHTML='<div class="msg">กำลังหาตำแหน่งของคุณ…</div>';
-  if(!navigator.geolocation){$("out").innerHTML='<div class="msg">เบราว์เซอร์นี้ไม่รองรับการระบุตำแหน่ง</div>';return;}
-  navigator.geolocation.getCurrentPosition(async pos=>{
-    const {latitude:lat,longitude:lon}=pos.coords;
-    try{
-      const url="https://air-quality-api.open-meteo.com/v1/air-quality?latitude="+lat+"&longitude="+lon+
-        "&current=us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,carbon_monoxide&timezone=auto";
-      const r=await fetch(url); if(!r.ok) throw 0;
-      const d=(await r.json()).current;
-      const L=level(d.pm2_5);
-      document.documentElement.style.setProperty("--c",L.c);
-      $("out").innerHTML=
-        '<div class="card"><div class="big">'+fmt(d.pm2_5)+'</div>'+
-        '<div class="unit">PM2.5 (µg/m³)</div>'+
-        '<div class="label">'+L.t+'</div><div class="tip">'+L.tip+'</div></div>'+
-        '<div class="grid">'+
-        '<div class="mini"><b>'+fmt(d.pm10)+'</b><span>PM10</span></div>'+
-        '<div class="mini"><b>'+fmt(d.us_aqi)+'</b><span>US AQI</span></div>'+
-        '<div class="mini"><b>'+fmt(d.ozone)+'</b><span>โอโซน</span></div>'+
-        '</div>';
-      $("place").textContent="อัปเดต "+d.time.replace("T"," ")+" น.";
-      try{
-        const g=await fetch("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude="+lat+"&longitude="+lon+"&localityLanguage=th");
-        const j=await g.json();
-        const name=[j.locality,j.city||j.principalSubdivision].filter(Boolean).join(", ");
-        if(name) $("place").textContent="📍 "+name+" · "+$("place").textContent;
-      }catch(e){}
-    }catch(e){
-      $("out").innerHTML='<div class="msg">โหลดข้อมูลไม่สำเร็จ ลองรีเฟรชอีกครั้ง</div>';
-    }
-  },err=>{
-    $("out").innerHTML='<div class="msg">ไม่ได้รับอนุญาตให้ใช้ตำแหน่ง<br>โปรดเปิดการอนุญาตตำแหน่งสำหรับเบราว์เซอร์แล้วกดรีเฟรช</div>';
-  },{enableHighAccuracy:false,timeout:15000,maximumAge:300000});
+function getJSON(url,ms){
+  const ac=new AbortController(), t=setTimeout(()=>ac.abort(),ms||12000);
+  return fetch(url,{signal:ac.signal}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).finally(()=>clearTimeout(t));
 }
-$("refresh").onclick=load;
-load();
-setInterval(load,600000);
-</script>
-</body>
-</html>
+
+function render(data){
+  const d=data.current, h=data.hourly;
+  const L=lv(d.pm2_5), A=aq(d.us_aqi);
+  document.documentElement.style.setProperty("--c",L.c);
+
+  // หาสารที่ทำให้ US AQI สูงสุด
+  let dom=null;
+  POLL.forEach(p=>{const v=d[p.k]; if(v!=null&&(dom==null||v>dom.v)) dom={v:v,n:p.n,dust:p.dust};});
+  let why="";
+  if(dom){
+    if(d.us_aqi<=50) why="ทุกสารอยู่ในเกณฑ์ดี";
+    else if(dom.dust) why="ค่ารวมสูงเพราะ"+dom.n;
+    else why="ค่ารวมสูงเพราะ"+dom.n+" (ไม่ใช่ฝุ่น) ส่วนฝุ่น PM2.5 อยู่ที่ระดับ \""+L.t+"\"";
+  }
+
+  // กราฟ PM2.5 รายชั่วโมงของวันนี้
+  let chart="";
+  if(h&&h.pm2_5&&h.time){
+    const vals=h.pm2_5, nowKey=d.time.slice(0,13);
+    const mx=Math.max(25,...vals.filter(v=>v!=null));
+    chart='<div class="box"><h2>PM2.5 รายชั่วโมงของวันนี้ (วงขาว = ตอนนี้)</h2><div class="bars">'+
+      vals.map((v,i)=>{
+        const hh=v==null?3:Math.max(3,Math.round(v/mx*70));
+        const isNow=h.time[i].slice(0,13)===nowKey;
+        return '<i class="'+(isNow?"now":"")+'" style="height:'+hh+'px;background:'+(v==null?"#999":lv(v).c)+'" title="'+esc(h.time[i].slice(11,16))+' น. '+fmt(v)+'"></i>';
+      }).join("")+
+      '</div><div class="axis"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div></div>';
+  }
+
+  $("out").innerHTML=
+    '<div class="card"><div class="big">'+fmt(d.pm2_5)+'</div>'+
+    '<div class="unit">PM2.5 (µg/m³)</div>'+
+    '<div class="label">'+L.t+'</div><div class="tip">'+L.tip+'</div></div>'+
+    '<div class="grid">'+
+    '<div class="mini"><b>'+fmt(d.pm10)+'</b><span>PM10</span></div>'+
+    '<div class="mini"><b>'+fmt(d.us_aqi)+'</b><span>US AQI</span></div>'+
+    '<div class="mini"><b>'+fmt(d.ozone)+'</b><span>โอโซน</span></div>'+
+    '</div>'+
+    '<div class="box"><h2>ภาพรวมทุกสารมลพิษ (US AQI)</h2>'+
+    '<span class="pill" style="background:'+A.c+'">'+fmt(d.us_aqi)+' · '+A.t+'</span>'+
+    '<div style="margin-top:8px;color:var(--sub)">'+esc(why)+'</div>
