@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ค่าฝุ่นรอบตัวคุณ</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--text:#1b2733;--sub:#5f6f7e;--c:#999}
+@media(prefers-color-scheme:dark){:root{--bg:#10161c;--card:#1a232c;--text:#e8eef3;--sub:#93a3b1}}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;justify-content:center;padding:20px}
+main{width:100%;max-width:440px}
+h1{font-size:18px;margin:0 0 4px}
+.place{color:var(--sub);font-size:14px;margin-bottom:16px;min-height:20px}
+.card{background:var(--card);border-radius:20px;padding:24px;text-align:center;border-top:8px solid var(--c);box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.big{font-size:72px;font-weight:700;line-height:1;color:var(--c)}
+.unit{color:var(--sub);font-size:14px;margin-top:4px}
+.label{font-size:22px;font-weight:600;margin-top:14px}
+.tip{color:var(--sub);font-size:14px;margin-top:6px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.mini{background:var(--card);border-radius:14px;padding:12px 6px;text-align:center}
+.mini b{display:block;font-size:20px}
+.mini span{font-size:12px;color:var(--sub)}
+button{margin-top:16px;width:100%;padding:14px;border:0;border-radius:12px;font-size:16px;background:#2f80ed;color:#fff}
+.note{font-size:12px;color:var(--sub);margin-top:14px;line-height:1.5}
+.msg{padding:30px 10px;color:var(--sub)}
+</style>
+</head>
+<body>
+<main>
+  <h1>ค่าฝุ่นรอบตัวคุณ</h1>
+  <div class="place" id="place"></div>
+  <div id="out"><div class="msg">กำลังหาตำแหน่งของคุณ… (กดอนุญาตการเข้าถึงตำแหน่ง)</div></div>
+  <button id="refresh">รีเฟรช</button>
+  <div class="note">ข้อมูลจากแบบจำลองคุณภาพอากาศ (Open-Meteo / CAMS) ความละเอียดราว 11 กม. ไม่ใช่ค่าจากเครื่องวัดตรงจุดที่ยืน ใช้ประกอบการตัดสินใจเท่านั้น<br>เกณฑ์สี PM2.5 อิงเกณฑ์ดัชนีคุณภาพอากาศของไทย</div>
+</main>
+<script>
+const LEVELS=[
+ {max:15,  c:"#1ea7e1", t:"อากาศดีมาก", tip:"ทำกิจกรรมกลางแจ้งได้ตามปกติ"},
+ {max:25,  c:"#2eb872", t:"อากาศดี",     tip:"ทำกิจกรรมกลางแจ้งได้ตามปกติ"},
+ {max:37.5,c:"#f2b807", t:"ปานกลาง",     tip:"กลุ่มเสี่ยงควรลดกิจกรรมกลางแจ้งนานๆ"},
+ {max:75,  c:"#f07a1a", t:"เริ่มมีผลต่อสุขภาพ", tip:"แนะนำสวมหน้ากากเมื่ออยู่กลางแจ้ง"},
+ {max:1e9, c:"#e03a3a", t:"มีผลต่อสุขภาพ", tip:"ควรลดกิจกรรมกลางแจ้งและสวมหน้ากาก N95"}
+];
+const $=id=>document.getElementById(id);
+const level=v=>LEVELS.find(l=>v<=l.max);
+const fmt=v=>v==null?"–":Math.round(v*10)/10;
+
+async function load(){
+  $("out").innerHTML='<div class="msg">กำลังหาตำแหน่งของคุณ…</div>';
+  if(!navigator.geolocation){$("out").innerHTML='<div class="msg">เบราว์เซอร์นี้ไม่รองรับการระบุตำแหน่ง</div>';return;}
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const {latitude:lat,longitude:lon}=pos.coords;
+    try{
+      const url="https://air-quality-api.open-meteo.com/v1/air-quality?latitude="+lat+"&longitude="+lon+
+        "&current=us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,carbon_monoxide&timezone=auto";
+      const r=await fetch(url); if(!r.ok) throw 0;
+      const d=(await r.json()).current;
+      const L=level(d.pm2_5);
+      document.documentElement.style.setProperty("--c",L.c);
+      $("out").innerHTML=
+        '<div class="card"><div class="big">'+fmt(d.pm2_5)+'</div>'+
+        '<div class="unit">PM2.5 (µg/m³)</div>'+
+        '<div class="label">'+L.t+'</div><div class="tip">'+L.tip+'</div></div>'+
+        '<div class="grid">'+
+        '<div class="mini"><b>'+fmt(d.pm10)+'</b><span>PM10</span></div>'+
+        '<div class="mini"><b>'+fmt(d.us_aqi)+'</b><span>US AQI</span></div>'+
+        '<div class="mini"><b>'+fmt(d.ozone)+'</b><span>โอโซน</span></div>'+
+        '</div>';
+      $("place").textContent="อัปเดต "+d.time.replace("T"," ")+" น.";
+      try{
+        const g=await fetch("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude="+lat+"&longitude="+lon+"&localityLanguage=th");
+        const j=await g.json();
+        const name=[j.locality,j.city||j.principalSubdivision].filter(Boolean).join(", ");
+        if(name) $("place").textContent="📍 "+name+" · "+$("place").textContent;
+      }catch(e){}
+    }catch(e){
+      $("out").innerHTML='<div class="msg">โหลดข้อมูลไม่สำเร็จ ลองรีเฟรชอีกครั้ง</div>';
+    }
+  },err=>{
+    $("out").innerHTML='<div class="msg">ไม่ได้รับอนุญาตให้ใช้ตำแหน่ง<br>โปรดเปิดการอนุญาตตำแหน่งสำหรับเบราว์เซอร์แล้วกดรีเฟรช</div>';
+  },{enableHighAccuracy:false,timeout:15000,maximumAge:300000});
+}
+$("refresh").onclick=load;
+load();
+setInterval(load,600000);
+</script>
+</body>
+</html>
