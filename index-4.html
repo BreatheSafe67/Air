@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ค่าฝุ่น ค้นหาได้ทั้งจังหวัดและอำเภอ</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--text:#1b2733;--sub:#5f6f7e;--c:#999;--line:rgba(128,128,128,.25)}
+@media(prefers-color-scheme:dark){:root{--bg:#10161c;--card:#1a232c;--text:#e8eef3;--sub:#93a3b1}}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;justify-content:center;padding:20px}
+main{width:100%;max-width:440px}
+h1{font-size:18px;margin:0 0 4px}
+.place{color:var(--sub);font-size:14px;margin-bottom:12px;min-height:20px;line-height:1.4}
+.search{display:flex;gap:8px}
+.search input{flex:1;min-width:0;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--text);font-size:16px}
+.search button{margin:0;width:auto;padding:0 16px}
+#results{margin:8px 0 14px;background:var(--card);border-radius:14px;overflow:hidden}
+#results:empty{display:none}
+#results .r{display:block;width:100%;text-align:left;background:none;color:var(--text);border:0;border-radius:0;border-top:1px solid var(--line);margin:0;padding:12px 14px;font-size:15px}
+#results .r:first-child{border-top:0}
+#results .empty{padding:14px;color:var(--sub);font-size:14px;line-height:1.5}
+.hint{font-size:12px;color:var(--sub);margin:6px 2px 14px;line-height:1.5}
+.card{background:var(--card);border-radius:20px;padding:24px;text-align:center;border-top:8px solid var(--c);box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.big{font-size:72px;font-weight:700;line-height:1;color:var(--c)}
+.unit{color:var(--sub);font-size:14px;margin-top:4px}
+.label{font-size:22px;font-weight:600;margin-top:14px}
+.tip{color:var(--sub);font-size:14px;margin-top:6px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.mini{background:var(--card);border-radius:14px;padding:12px 6px;text-align:center}
+.mini b{display:block;font-size:20px}
+.mini span{font-size:12px;color:var(--sub)}
+.box{background:var(--card);border-radius:14px;padding:14px;margin-top:14px;font-size:14px;line-height:1.5}
+.box h2{font-size:14px;margin:0 0 8px;color:var(--sub);font-weight:600}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;color:#fff;font-weight:600;font-size:13px}
+.bars{display:flex;align-items:flex-end;gap:2px;height:70px}
+.bars i{flex:1;border-radius:3px 3px 0 0;min-height:3px}
+.bars i.now{outline:2px solid var(--text);outline-offset:1px}
+.axis{display:flex;justify-content:space-between;font-size:11px;color:var(--sub);margin-top:4px}
+.legend div{display:flex;align-items:center;gap:8px;margin:4px 0}
+.dot{width:14px;height:14px;border-radius:50%;flex:none}
+.care{border-left:6px solid var(--c)}
+.care ul,.box details ul{margin:6px 0 0;padding-left:20px}
+.care li,.box details li{margin:4px 0}
+.box details{border-top:1px solid var(--line);padding:10px 0 0;margin-top:10px}
+.box details:first-of-type{margin-top:12px}
+.box summary{font-weight:600;cursor:pointer}
+.warn{color:#e03a3a}
+button{margin-top:10px;width:100%;padding:14px;border:0;border-radius:12px;font-size:16px;background:#2f80ed;color:#fff}
+button:disabled{opacity:.6}
+button.ghost{background:var(--card);color:var(--text);border:1px solid var(--line)}
+.row{display:flex;gap:8px}
+.row button{margin-top:12px}
+.note{font-size:12px;color:var(--sub);margin-top:14px;line-height:1.5}
+.msg{padding:30px 10px;color:var(--sub);line-height:1.6}
+.msec{margin-top:24px}
+.msec h2{font-size:15px;margin:0 0 6px}
+#map{height:50vh;min-height:320px;border-radius:16px;overflow:hidden;z-index:0}
+.mrow{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:var(--sub)}
+.mrow input{flex:1;min-width:0}
+#hl{min-width:130px;text-align:right;color:var(--text);font-weight:600}
+.mlegend{display:flex;margin-top:8px;border-radius:8px;overflow:hidden;font-size:11px;color:#fff;text-align:center}
+.mlegend div{flex:1;padding:4px 2px}
+.mstatus{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.5}
+.leaflet-popup-content{font-size:14px;line-height:1.5;color:#1b2733}
+.tabs{display:flex;gap:6px;margin:8px 0}
+.tabs select{flex:1;min-width:0;padding:9px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);font-size:14px}
+#ro{font-size:13px;min-height:38px;line-height:1.4}
+svg.ch{width:100%;height:auto;display:block;touch-action:pan-y;user-select:none;color:var(--text)}
+svg.ch text{fill:var(--sub);font-size:10px}
+.fc{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.fc.f0{border-top:0}
+.fc .d{width:70px;font-weight:600}
+.fc .rg{flex:1;color:var(--sub);font-size:13px;text-align:right}
+button.rk{display:flex;align-items:center;gap:8px;width:100%;margin:0;padding:8px 0;background:none;color:var(--text);border:0;border-top:1px solid var(--line);border-radius:0;font-size:14px;text-align:left}
+button.rk:first-child{border-top:0}
+.rk b{width:22px;color:var(--sub);font-weight:600}
+.rk .n{width:104px;flex:none}
+.rk .bar{flex:1;height:10px;border-radius:5px;background:var(--line);position:relative;overflow:hidden}
+.rk .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px}
+.rk em{width:42px;text-align:right;font-style:normal;font-weight:600}
+.demo{display:inline-block;margin:0 0 8px;padding:2px 10px;border-radius:99px;background:#2f80ed;color:#fff;font-size:12px;font-weight:600}
+</style>
+</head>
+<body>
+<main>
+  <h1>ค่าฝุ่น</h1>
+  <div class="demo">ข้อมูลจำลองเพื่อการนำเสนอ</div>
+  <div class="place" id="place"></div>
+  <form class="search" id="sf" autocomplete="off">
+    <input id="q" type="search" placeholder="ค้นหาจังหวัด / อำเภอ / ตำบล" enterkeyhint="search">
+    <button type="submit">ค้นหา</button>
+  </form>
+  <div class="hint">ลองพิมพ์ เช่น "เชียงใหม่" หรือ "แม่ริม เชียงใหม่" หรือ "บางละมุง ชลบุรี" (พิมพ์ชื่อจังหวัดต่อท้ายจะเจออำเภอที่ถูกต้องง่ายขึ้น)</div>
+  <div id="results"></div>
+  <div id="out"><div class="msg">กำลังโหลด…</div></div>
+  <div class="row">
+    <button id="gps" class="ghost">📍 ตำแหน่งของฉัน</button>
+    <button id="refresh">รีเฟรช</button>
+  </div>
+  <div class="msec">
+    <h2>🗺️ แผนที่ค่าฝุ่น</h2>
+    <div id="map"></div>
+    <div class="mrow"><span>เวลา</span><input type="range" id="hour" min="0" max="47" value="0"><span id="hl"></span></div>
+    <div class="mlegend" id="mlegend"></div>
+    <div class="mstatus" id="mstatus">แตะบนแผนที่เพื่อดูค่าฝุ่นของจุดนั้น</div>
+  </div>
+  <div class="msec" id="rksec">
+    <h2>🏆 อันดับค่าฝุ่นรายจังหวัด (รายชั่วโมง)</h2>
+    <div class="tabs"><select id="rkm"><option value="hi">เรียงจากฝุ่นมากไปน้อย</option><option value="lo">เรียงจากฝุ่นน้อยไปมาก</option></select></div>
+    <div class="mrow"><span>เวลา</span><input type="range" id="rkt" min="0" max="0" value="0"><span id="rkh"></span></div>
+    <div class="box" id="rkl"><div class="msg" style="padding:12px 0">รอโหลด…</div></div>
+    <button type="button" class="ghost" id="rkmore" style="display:none">ดูทั้ง 77 จังหวัด</button>
+    <div class="mstatus" id="rkst"></div>
+    <div class="note" style="margin-top:6px">ค่าที่จุดกลางตัวเมืองของแต่ละจังหวัด (แบบจำลอง ~11 กม.) ไม่ใช่ค่าเฉลี่ยทั้งจังหวัด แตะชื่อจังหวัดเพื่อดูรายละเอียด</div>
+  </div>
+  <div class="note">ข้อมูลจากแบบจำลองคุณภาพอากาศ (Open-Meteo / CAMS) ความละเอียดราว 11 กม. ไม่ใช่ค่าจากเครื่องวัดตรงจุด อำเภอที่อยู่ใกล้กันมากอาจได้ค่าเท่ากัน ใช้ประกอบการตัดสินใจเท่านั้น สีบนแผนที่เป็นการประมาณเป็นช่วงๆ<br>เกณฑ์สี PM2.5 อ้างอิงมาตรฐานค่าฝุ่นเฉลี่ย 24 ชม. ของไทย (37.5 µg/m³) ส่วน US AQI เป็นเกณฑ์สหรัฐฯ<br>ชื่อสถานที่จาก OpenStreetMap (Nominatim) และ Open-Meteo Geocoding · แผนที่ © OpenStreetMap, © CARTO</div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+window.addEventListener("error",function(e){
+  var o=document.getElementById("out");
+  if(o) o.innerHTML='<div class="msg">เกิดข้อผิดพลาดของสคริปต์:<br>'+String(e.message)+'</div>';
+});  
+/* ===== 3 สี: เขียว / เหลือง / แดง (แก้เกณฑ์ที่ค่า max ตรงนี้ที่เดียว) ===== */
+const LEVELS=[
+ {max:25,  c:"#2eb872", n:"เขียว",  r:"0–25",       t:"อากาศบริสุทธิ์",      tip:"ทำกิจกรรมกลางแจ้งได้ตามปกติ",
+  care:["ทำกิจกรรมและออกกำลังกายกลางแจ้งได้ตามปกติ","เปิดหน้าต่างระบายอากาศได้","เป็นช่วงที่เหมาะกับการออกกำลังกายกลางแจ้ง"]},
+ {max:37.5,c:"#e0a800", n:"เหลือง", r:"25.1–37.5",  t:"เริ่มมีฝุ่นเพิ่มขึ้น", tip:"กลุ่มเสี่ยงควรระวัง และลดกิจกรรมกลางแจ้งนานๆ",
+  care:["กลุ่มเสี่ยง (เด็กเล็ก ผู้สูงอายุ หญิงตั้งครรภ์ ผู้มีโรคปอด โรคหัวใจ ภูมิแพ้) ควรลดกิจกรรมกลางแจ้งนานๆ","คนทั่วไปทำกิจกรรมได้ แต่ถ้าแสบตา ไอ หรือหายใจไม่สะดวก ให้พักและเข้าที่ร่ม","พกหน้ากากติดตัวไว้ เผื่อฝุ่นเพิ่มขึ้น","สังเกตอาการของตัวเองและคนในบ้าน"]},
+ {max:1e9, c:"#e03a3a", n:"แดง",    r:"มากกว่า 37.5", t:"ฝุ่นเยอะ อันตราย",   tip:"ควรลดกิจกรรมกลางแจ้งและสวมหน้ากาก N95",
+  care:["สวมหน้ากาก N95 เมื่อออกนอกอาคาร และให้แนบกระชับกับใบหน้า (หน้ากากผ้าหรือหน้ากากอนามัยทั่วไปกันฝุ่นละเอียดได้น้อย)","งดออกกำลังกายและกิจกรรมกลางแจ้ง","ปิดประตูหน้าต่าง และใช้เครื่องฟอกอากาศ (ไส้กรอง HEPA) ถ้ามี","เด็ก ผู้สูงอายุ หญิงตั้งครรภ์ และผู้มีโรคปอด/โรคหัวใจ ควรอยู่ในอาคารให้มากที่สุด","กลับจากข้างนอกแล้วล้างหน้า ล้างจมูกด้วยน้ำเกลือ และเปลี่ยนเสื้อผ้า","ผู้มีโรคประจำตัว เตรียมยาประจำตัวให้พร้อมใช้"]}
+];
+const AQI=[
+ {max:50, c:"#2eb872", t:"ดี"},
+ {max:100,c:"#e0a800", t:"ปานกลาง"},
+ {max:1e9,c:"#e03a3a", t:"ไม่ดีต่อสุขภาพ"}
+];
+const POLL=[
+ {k:"us_aqi_pm2_5",n:"ฝุ่น PM2.5",dust:true},
+ {k:"us_aqi_pm10",n:"ฝุ่น PM10",dust:true},
+ {k:"us_aqi_ozone",n:"โอโซน",dust:false},
+ {k:"us_aqi_nitrogen_dioxide",n:"ก๊าซ NO₂",dust:false},
+ {k:"us_aqi_sulphur_dioxide",n:"ก๊าซ SO₂",dust:false},
+ {k:"us_aqi_carbon_monoxide",n:"ก๊าซ CO",dust:false}
+];
+const $=id=>document.getElementById(id);
+const lv=v=>LEVELS.find(l=>v<=l.max);
+const aq=v=>AQI.find(l=>v<=l.max);
+const fmt=v=>v==null?"–":Math.round(v*10)/10;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function uniq(a){return a.filter((x,i)=>x&&a.indexOf(x)===i);}
+
+function getJSON(url,ms){
+  const ac=new AbortController(), t=setTimeout(()=>ac.abort(),ms||12000);
+  return fetch(url,{signal:ac.signal}).then(r=>{if(!r.ok){const e=new Error(r.status);e.status=r.status;throw e;}return r.json();}).finally(()=>clearTimeout(t));
+}
+
+/* ===== ความรู้เรื่องสุขภาพกับ PM2.5 ===== */
+const HEALTH=
+ '<div class="box"><h2>🩺 อาการและโรคที่เกี่ยวกับฝุ่น PM2.5</h2>'+
+ '<div>PM2.5 เล็กมากจนเข้าไปถึงถุงลมปอดและเข้ากระแสเลือดได้ ผลต่อร่างกายแต่ละคนไม่เท่ากัน กลุ่มเสี่ยงคือเด็กเล็ก ผู้สูงอายุ หญิงตั้งครรภ์ และผู้ที่มีโรคปอดหรือโรคหัวใจอยู่แล้ว</div>'+
+ '<details><summary>อาการที่พบได้เมื่อรับฝุ่น</summary><ul>'+
+ '<li>แสบตา น้ำตาไหล คันตา</li><li>คัดจมูก น้ำมูก จาม เจ็บคอ</li><li>ไอแห้ง ระคายคอ</li><li>ผิวคัน ผื่นขึ้น</li><li>ปวดหัว เหนื่อยง่ายกว่าปกติ</li></ul></details>'+
+ '<details><summary>โรคที่เสี่ยงเมื่อรับฝุ่นบ่อยหรือนาน</summary><ul>'+
+ '<li>หอบหืดกำเริบ</li><li>หลอดลมอักเสบ ปอดอักเสบ</li><li>โรคปอดอุดกั้นเรื้อรัง (COPD) กำเริบ</li><li>ภูมิแพ้ทางเดินหายใจ ไซนัสอักเสบ</li><li>โรคหัวใจและหลอดเลือด เช่น กล้ามเนื้อหัวใจขาดเลือด โรคหลอดเลือดสมอง</li><li>มะเร็งปอด (จากการรับฝุ่นสะสมในระยะยาว)</li></ul></details>'+
+ '<details><summary>ควรไปพบแพทย์เมื่อ</summary><ul>'+
+ '<li>ไอต่อเนื่องเกิน 2 สัปดาห์</li><li>หายใจมีเสียงหวีด เหนื่อยหอบง่ายผิดปกติ</li><li>แน่นหน้าอก ใจสั่น</li><li>ไอมีเสมหะสีเขียวเหลือง หรือมีไข้ร่วมด้วย</li><li>ผู้ที่มีโรคประจำตัวและอาการแย่ลงกว่าปกติ</li></ul></details>'+
+ '<details><summary class="warn">อาการฉุกเฉิน โทร 1669 ทันที</summary><ul>'+
+ '<li>หายใจลำบากมาก พูดไม่เป็นประโยค</li><li>เจ็บแน่นหน้าอกรุนแรง</li><li>ไอเป็นเลือด</li><li>ริมฝีปากหรือปลายนิ้วเขียวคล้ำ</li><li>หน้ามืด เป็นลม</li></ul></details>'+
+ '<div class="note">ข้อมูลนี้เป็นความรู้เบื้องต้น ไม่ใช่การวินิจฉัยโรค หากมีอาการหรือกังวล ควรปรึกษาแพทย์</div></div>';
+/* ===== แผนที่ระบายสีค่าฝุ่น (ถ้าแผนที่พัง ส่วนอื่นยังใช้ได้) ===== */
+var mapGo=function(){};
+try{(function(){
+  const STEPS=[0.1,0.25,0.5,1,2,3,5,8,12,20];
+  function pickStep(span){
+    const target=span/6;
+    return STEPS.find(s=>s>=target)||STEPS[STEPS.length-1];
+  }
+  function r3(x){return Math.round(x*1000)/1000;}
+  function makeGrid(south,north,west,east){
+    let step=pickStep(Math.max(north-south,(east-west)/1.4));
+    let pts;
+    for(let guard=0;guard<10;guard++){
+      pts=[];
+      const la0=Math.max(-85,Math.floor(south/step)*step-step), la1=Math.min(85,Math.ceil(north/step)*step+step);
+      const lo0=Math.max(-180,Math.floor(west/step)*step-step), lo1=Math.min(180,Math.ceil(east/step)*step+step);
+      for(let la=la0;la<=la1+1e-9;la+=step){
+        for(let lo=lo0;lo<=lo1+1e-9;lo+=step){pts.push({lat:r3(la),lon:r3(lo)});}
+      }
+      if(pts.length<=80) break;
+      const i=STEPS.indexOf(step);
+      step=STEPS[Math.min(STEPS.length-1,i+1)];
+    }
+    return {step:step,pts:pts};
+  }
+  /*MAP*/
+  const API="https://air-quality-api.open-meteo.com/v1/air-quality";
+  const dark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const map=L.map("map",{minZoom:3,maxZoom:10,worldCopyJump:false,maxBounds:[[-85,-180],[85,180]],maxBoundsViscosity:1}).setView([13.5,101],6);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/"+(dark?"dark_all":"light_all")+"/{z}/{x}/{y}{r}.png",{
+    attribution:"&copy; OpenStreetMap &copy; CARTO",subdomains:"abcd",maxZoom:19
+  }).addTo(map);
+  map.createPane("cells");
+  const cp=map.getPane("cells"); cp.style.zIndex=350; cp.style.opacity=".62"; cp.style.filter="blur(7px)"; cp.style.pointerEvents="none";
+  const rend=L.svg({pane:"cells",padding:0.5});
+  const cellLayer=L.layerGroup().addTo(map);
+  let pin=null, cache={}, times=[], hourIdx=0, nowIdx=0, curGrid=null, token=0, timer=null;
+
+  $("mlegend").innerHTML=LEVELS.map(l=>'<div style="background:'+l.c+'">'+l.n+' '+l.r+'</div>').join("");
+  const idle="แตะบนแผนที่เพื่อดูค่าฝุ่นของจุดนั้น";
+
+  function fmtTime(t){
+    const d=new Date(t+":00Z");
+    return d.toLocaleString("th-TH",{weekday:"short",hour:"2-digit",minute:"2-digit"})+" น.";
+  }
+  function updateLabel(){
+    $("hl").textContent=times.length?(hourIdx===nowIdx?"ตอนนี้ · ":"")+fmtTime(times[hourIdx]):"";
+  }
+  function draw(){
+    cellLayer.clearLayers();
+    if(!curGrid) return;
+    const s=curGrid.step;
+    curGrid.pts.forEach(p=>{
+      const arr=cache[s+"|"+p.lat+","+p.lon];
+      const v=arr&&arr[hourIdx];
+      if(v==null) return;
+      L.rectangle([[p.lat-s/2,p.lon-s/2],[p.lat+s/2,p.lon+s/2]],
+        {renderer:rend,stroke:false,fillColor:lv(v).c,fillOpacity:1,interactive:false}).addTo(cellLayer);
+    });
+  }
+  async function refreshGrid(){
+    const b=map.getBounds();
+    curGrid=makeGrid(b.getSouth(),b.getNorth(),b.getWest(),b.getEast());
+    const s=curGrid.step;
+    const need=curGrid.pts.filter(p=>!cache[s+"|"+p.lat+","+p.lon]);
+    const my=++token;
+    draw();
+    if(!need.length){$("mstatus").textContent=idle;return;}
+    $("mstatus").textContent="กำลังโหลดข้อมูลบนแผนที่…";
+    try{
+      for(let i=0;i<need.length;i+=40){
+        const ch=need.slice(i,i+40);
+        const url=API+"?latitude="+ch.map(p=>p.lat).join(",")+"&longitude="+ch.map(p=>p.lon).join(",")+
+          "&hourly=pm2_5&forecast_days=2&timezone=GMT";
+        const j=await getJSON(url,20000);
+        const arr=Array.isArray(j)?j:[j];
+        arr.forEach((o,k)=>{
+          if(o&&o.hourly){
+            cache[s+"|"+ch[k].lat+","+ch[k].lon]=o.hourly.pm2_5;
+            if(!times.length){
+              times=o.hourly.time;
+              const f=times.indexOf(new Date().toISOString().slice(0,13)+":00");
+              nowIdx=f<0?0:f; hourIdx=nowIdx;
+              $("hour").max=times.length-1; $("hour").value=hourIdx;
+            }
+          }
+        });
+        if(my!==token) return;
+        updateLabel(); draw();
+      }
+      $("mstatus").textContent=idle;
+    }catch(e){
+      $("mstatus").textContent=e&&e.status===429?"ใช้งานถี่เกินไป รอสักครู่แล้วลองเลื่อนแผนที่อีกครั้ง":"โหลดข้อมูลแผนที่ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ต";
+    }
+  }
+  function scheduleRefresh(){clearTimeout(timer);timer=setTimeout(refreshGrid,500);}
+  map.on("moveend",scheduleRefresh);
+  $("hour").addEventListener("input",e=>{hourIdx=+e.target.value;updateLabel();draw();});
+
+  async function showPoint(lat,lon){
+    const pop=L.popup().setLatLng([lat,lon]).setContent("กำลังโหลด…").openOn(map);
+    try{
+      const nmP=getJSON("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude="+lat+"&longitude="+lon+"&localityLanguage=th",8000)
+        .then(j=>uniq([j.locality,j.city,j.principalSubdivision,j.countryName]).slice(0,2).join(", ")).catch(()=>"");
+      const [j,nm]=await Promise.all([
+        getJSON(API+"?latitude="+lat+"&longitude="+lon+"&current=pm2_5,pm10,us_aqi&timezone=auto"),nmP]);
+      const c=j.current, V=lv(c.pm2_5);
+      pop.setContent((nm?'<b>'+esc(nm)+'</b><br>':'')+
+        'PM2.5 <b style="color:'+V.c+'">'+fmt(c.pm2_5)+'</b> µg/m³ · '+V.t+'<br>PM10 '+fmt(c.pm10)+' · US AQI '+fmt(c.us_aqi)+
+        '<br><span style="color:#777;font-size:12px">ค่าตอนนี้ (แบบจำลอง)</span>');
+    }catch(e){pop.setContent("โหลดค่าไม่สำเร็จ ลองใหม่อีกครั้ง");}
+  }
+  map.on("click",e=>showPoint(r3(e.latlng.lat),r3(e.latlng.lng)));
+
+  mapGo=function(lat,lon){
+    const p=[+lat,+lon];
+    map.setView(p,9);
+    if(pin) pin.setLatLng(p);
+    else pin=L.circleMarker(p,{radius:7,color:"#fff",weight:2,fillColor:"#2f80ed",fillOpacity:1,interactive:false}).addTo(map);
+  };
+  scheduleRefresh();
+})();}catch(e){
+  var ms=document.getElementById("mstatus");
+  if(ms) ms.textContent="โหลดแผนที่ไม่สำเร็จ (ตรวจสอบอินเทอร์เน็ต) ส่วนค่าฝุ่นด้านบนยังใช้ได้";
+}  
+/* ===== กราฟรายชั่วโมง / พยากรณ์ / อันดับจังหวัด ===== */
+const TH=(x,full)=>new Date(x+":00Z").toLocaleString("th-TH",Object.assign({weekday:"short",hour:"2-digit",minute:"2-digit",timeZone:"UTC"},full?{day:"numeric",month:"short"}:{}))+" น.";
+const lvi=(v,c)=>v<=c[0]?0:v<=c[1]?1:2;
+const MET={pm2_5:{n:"PM2.5",u:" µg/m³",cut:[25,37.5]},pm10:{n:"PM10",u:" µg/m³",cut:[50,120]},us_aqi:{n:"US AQI",u:"",cut:[50,100]}};
+let HD=null,hm="pm2_5",hr="f48";
+function showRO(i){
+  const v=HD.h[hm][i], m=MET[hm], tt=TH(HD.h.time[i],1);
+  if(v==null){$("ro").textContent=tt+" · ไม่มีข้อมูล";return;}
+  const k=lvi(v,m.cut);
+  $("ro").innerHTML='<b>'+tt+'</b>'+(i===HD.now?' (ตอนนี้)':'')+'<br>'+m.n+' <b style="color:'+LEVELS[k].c+'">'+fmt(v)+'</b>'+m.u+' · '+LEVELS[k].n;
+}
+function drawChart(){
+  if(!HD||!$("hc")) return;
+  const h=HD.h, m=MET[hm], vs=h[hm], n=h.time.length, ni=HD.now;
+  let a,b;
+  if(hr==="p24"){a=Math.max(0,ni-24);b=ni;} else if(hr==="f48"){a=Math.max(0,ni-3);b=Math.min(n-1,ni+48);} else {a=ni;b=n-1;}
+  if(b<=a){a=Math.max(0,b-1);}
+  const W=400,H=170,pl=30,pr=8,pt=12,pb=24;
+  const mx=Math.max(m.cut[1]*1.2,...vs.slice(a,b+1).filter(v=>v!=null));
+  const X=i=>pl+(i-a)/(b-a)*(W-pl-pr), Y=v=>pt+(1-v/mx)*(H-pt-pb);
+  const step=b-a>60?12:b-a>30?6:3, big=b-a>60;
+  let s='', pts=[];
+  m.cut.forEach((c,k)=>{s+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(c)+'" y2="'+Y(c)+'" stroke="'+LEVELS[k].c+'" stroke-dasharray="4 4"/><text x="'+(pl-4)+'" y="'+(Y(c)+3)+'" text-anchor="end">'+c+'</text>';});
+  if(ni>=a&&ni<=b) s+='<line x1="'+X(ni)+'" x2="'+X(ni)+'" y1="'+pt+'" y2="'+(H-pb)+'" stroke="currentColor" stroke-opacity=".5"/><text x="'+X(ni)+'" y="9" text-anchor="middle">ตอนนี้</text>';
+  for(let i=a;i<=b;i++) if(vs[i]!=null) pts.push(X(i).toFixed(1)+","+Y(vs[i]).toFixed(1));
+  s+='<polyline points="'+pts.join(" ")+'" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1.5"/>';
+  for(let i=a;i<=b;i++){
+    const v=vs[i], hh=+h.time[i].slice(11,13);
+    if(v!=null) s+='<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(v).toFixed(1)+'" r="'+(big?2:3)+'" fill="'+LEVELS[lvi(v,m.cut)].c+'"/>';
+    if(hh%step===0) s+='<text x="'+X(i).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle">'+(hh===0?new Date(h.time[i].slice(0,10)+"T00:00:00Z").toLocaleDateString("th-TH",{weekday:"short",timeZone:"UTC"}):String(hh).padStart(2,"0")+":00")+'</text>';
+  }
+  s+='<line id="cur" y1="'+pt+'" y2="'+(H-pb)+'" stroke="currentColor" visibility="hidden"/>';
+  $("hc").innerHTML='<svg class="ch" viewBox="0 0 '+W+' '+H+'">'+s+'</svg>';
+  const svg=$("hc").firstChild;
+  const mv=e=>{
+    const r=svg.getBoundingClientRect(), x=(e.clientX-r.left)/r.width*W;
+    const i=Math.min(b,Math.max(a,a+Math.round((x-pl)/(W-pl-pr)*(b-a))));
+    const c=$("cur"); c.setAttribute("x1",X(i)); c.setAttribute("x2",X(i)); c.setAttribute("visibility","visible");
+    showRO(i);
+  };
+  svg.addEventListener("pointermove",mv); svg.addEventListener("pointerdown",mv);
+  showRO(Math.min(b,Math.max(a,ni)));
+}
+function initChart(){
+  if(!$("hm")) return;
+  $("hm").onchange=e=>{hm=e.target.value;drawChart();};
+  $("hr").onchange=e=>{hr=e.target.value;drawChart();};
+  drawChart();
+}
+
+/* ---------- อันดับรายจังหวัด (จุดกลางตัวเมือง) ---------- */
+const PROVS="กรุงเทพมหานคร,13.75,100.50;สมุทรปราการ,13.60,100.60;นนทบุรี,13.86,100.52;ปทุมธานี,14.02,100.53;พระนครศรีอยุธยา,14.35,100.57;อ่างทอง,14.59,100.45;ลพบุรี,14.80,100.65;สิงห์บุรี,14.89,100.40;ชัยนาท,15.19,100.13;สระบุรี,14.53,100.91;ชลบุรี,13.36,100.98;ระยอง,12.68,101.28;จันทบุรี,12.61,102.10;ตราด,12.24,102.52;ฉะเชิงเทรา,13.69,101.07;ปราจีนบุรี,14.05,101.37;นครนายก,14.20,101.21;สระแก้ว,13.82,102.07;นครราชสีมา,14.97,102.10;บุรีรัมย์,14.99,103.10;สุรินทร์,14.88,103.49;ศรีสะเกษ,15.12,104.32;อุบลราชธานี,15.24,104.85;ยโสธร,15.79,104.14;ชัยภูมิ,15.81,102.03;อำนาจเจริญ,15.86,104.63;บึงกาฬ,18.36,103.65;หนองบัวลำภู,17.20,102.44;ขอนแก่น,16.44,102.84;อุดรธานี,17.41,102.79;เลย,17.49,101.72;หนองคาย,17.88,102.74;มหาสารคาม,16.18,103.30;ร้อยเอ็ด,16.05,103.65;กาฬสินธุ์,16.43,103.51;สกลนคร,17.16,104.15;นครพนม,17.41,104.78;มุกดาหาร,16.54,104.72;เชียงใหม่,18.79,98.98;ลำพูน,18.58,99.01;ลำปาง,18.29,99.49;อุตรดิตถ์,17.63,100.10;แพร่,18.15,100.14;น่าน,18.78,100.78;พะเยา,19.17,99.90;เชียงราย,19.91,99.83;แม่ฮ่องสอน,19.30,97.97;นครสวรรค์,15.70,100.14;อุทัยธานี,15.38,100.03;กำแพงเพชร,16.48,99.52;ตาก,16.88,99.13;สุโขทัย,17.01,99.82;พิษณุโลก,16.82,100.26;พิจิตร,16.44,100.35;เพชรบูรณ์,16.42,101.16;ราชบุรี,13.53,99.82;กาญจนบุรี,14.02,99.53;สุพรรณบุรี,14.47,100.12;นครปฐม,13.82,100.06;สมุทรสาคร,13.55,100.27;สมุทรสงคราม,13.41,100.00;เพชรบุรี,13.11,99.94;ประจวบคีรีขันธ์,11.81,99.80;นครศรีธรรมราช,8.43,99.96;กระบี่,8.09,98.91;พังงา,8.45,98.53;ภูเก็ต,7.88,98.39;สุราษฎร์ธานี,9.14,99.33;ระนอง,9.96,98.64;ชุมพร,10.49,99.18;สงขลา,7.20,100.60;สตูล,6.62,100.07;ตรัง,7.56,99.61;พัทลุง,7.62,100.08;ปัตตานี,6.87,101.25;ยะลา,6.54,101.28;นราธิวาส,6.43,101.82"
+  .split(";").map(s=>{const p=s.split(",");return {n:p[0],lat:p[1],lon:p[2],v:null};});
+const RK={times:[],idx:0,mode:"hi",all:false,ready:false,busy:false};
+function drawRank(){
+  if(!RK.ready) return;
+  const i=RK.idx, P=PROVS.filter(p=>p.v&&p.v[i]!=null).sort((x,y)=>RK.mode==="hi"?y.v[i]-x.v[i]:x.v[i]-y.v[i]);
+  const mx=Math.max(40,...P.map(p=>p.v[i]));
+  $("rkh").textContent=TH(RK.times[i]);
+  $("rkl").innerHTML=(RK.all?P:P.slice(0,10)).map((p,k)=>
+    '<button type="button" class="rk" data-i="'+PROVS.indexOf(p)+'"><b>'+(k+1)+'</b><span class="n">'+esc(p.n)+'</span><span class="bar"><i style="width:'+Math.max(2,p.v[i]/mx*100)+'%;background:'+lv(p.v[i]).c+'"></i></span><em>'+fmt(p.v[i])+'</em></button>').join("")||'<div class="msg" style="padding:12px 0">ไม่มีข้อมูลในช่วงเวลานี้</div>';
+  $("rkmore").style.display=P.length>10?"":"none";
+  $("rkmore").textContent=RK.all?"แสดงเฉพาะ 10 อันดับแรก":"ดูทั้ง "+P.length+" จังหวัด";
+}
+async function loadRank(){
+  if(RK.ready||RK.busy) return;
+  RK.busy=true; $("rkst").textContent="กำลังโหลดข้อมูลทุกจังหวัด…";
+  try{
+    for(let i=0;i<PROVS.length;i+=40){
+      const ch=PROVS.slice(i,i+40);
+      const j=await getJSON("https://air-quality-api.open-meteo.com/v1/air-quality?latitude="+ch.map(p=>p.lat).join(",")+"&longitude="+ch.map(p=>p.lon).join(",")+"&hourly=pm2_5&past_days=1&forecast_days=2&timezone=Asia%2FBangkok",25000);
+      (Array.isArray(j)?j:[j]).forEach((o,k)=>{if(o&&o.hourly){ch[k].v=o.hourly.pm2_5; if(!RK.times.length) RK.times=o.hourly.time;}});
+    }
+    const f=RK.times.indexOf(new Date(Date.now()+25200000).toISOString().slice(0,13)+":00");
+    RK.idx=f<0?0:f; RK.ready=true;
+    $("rkt").max=RK.times.length-1; $("rkt").value=RK.idx;
+    $("rkst").textContent=""; drawRank();
+  }catch(e){
+    $("rkst").textContent=e&&e.status===429?"ใช้งานถี่เกินไป รอสักครู่แล้วรีเฟรชหน้า":"โหลดอันดับไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้า";
+  }
+  RK.busy=false;
+}
+$("rkt").addEventListener("input",e=>{RK.idx=+e.target.value;drawRank();});
+$("rkm").addEventListener("change",e=>{RK.mode=e.target.value;drawRank();});
+$("rkmore").addEventListener("click",()=>{RK.all=!RK.all;drawRank();});
+$("rkl").addEventListener("click",e=>{
+  const b=e.target.closest(".rk"); if(!b) return;
+  const p=PROVS[+b.dataset.i]; if(!p) return;
+  show({lat:p.lat,lon:p.lon,name:p.n}); window.scrollTo({top:0,behavior:"smooth"});
+});
+if("IntersectionObserver" in window){
+  const io=new IntersectionObserver(es=>{if(es[0].isIntersecting){io.disconnect();loadRank();}},{rootMargin:"400px"});
+  io.observe($("rksec"));
+} else loadRank();
+
+function render(data){
+  const d=data.current, h=data.hourly;
+  const LV=lv(d.pm2_5), A=aq(d.us_aqi);
+  document.documentElement.style.setProperty("--c",LV.c);
+
+  let dom=null;
+  POLL.forEach(p=>{const v=d[p.k]; if(v!=null&&(dom==null||v>dom.v)) dom={v:v,n:p.n,dust:p.dust};});
+  let why="";
+  if(dom){
+    if(d.us_aqi<=50) why="ทุกสารอยู่ในเกณฑ์ดี";
+    else if(dom.dust) why="ค่ารวมสูงเพราะ"+dom.n;
+    else why="ค่ารวมสูงเพราะ"+dom.n+" (ไม่ใช่ฝุ่น) ส่วนฝุ่น PM2.5 อยู่ที่ระดับ \""+LV.t+"\"";
+  }
+
+  let chart="", fc="";
+  if(h&&h.pm2_5&&h.time){
+    const nk=d.time.slice(0,13);
+    HD={h:h,now:Math.max(0,h.time.findIndex(x=>x.slice(0,13)===nk))};
+    const by={};
+    h.time.forEach((x,i)=>{const v=h.pm2_5[i]; if(v!=null){(by[x.slice(0,10)]=by[x.slice(0,10)]||[]).push(v);}});
+    const days=Object.keys(by).filter(k=>k>=d.time.slice(0,10)).sort();
+    fc='<div class="box"><h2>📅 พยากรณ์ PM2.5 ล่วงหน้า (เฉลี่ยรายวัน)</h2>'+days.map((k,i)=>{
+      const vs=by[k], av=vs.reduce((s,x)=>s+x,0)/vs.length, Z=lv(av);
+      const nm=i===0?"วันนี้":i===1?"พรุ่งนี้":new Date(k+"T00:00:00Z").toLocaleDateString("th-TH",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"});
+      return '<div class="fc'+(i===0?' f0':'')+'"><span class="d">'+nm+'</span><span class="pill" style="background:'+Z.c+'">'+fmt(av)+'</span><span>'+Z.n+'</span><span class="rg">'+fmt(Math.min(...vs))+' – '+fmt(Math.max(...vs))+'</span></div>';
+    }).join("")+'<div class="note" style="margin-top:8px">ค่าเฉลี่ยทั้งวัน เทียบเกณฑ์ 24 ชม. (37.5) ได้โดยตรง ตัวเลขขวาคือต่ำสุด–สูงสุดของวัน การพยากรณ์ล่วงหน้ายิ่งไกลยิ่งคลาดเคลื่อนได้มาก</div></div>';
+    const op=(o,v)=>'<option value="'+o[0]+'"'+(o[0]===v?' selected':'')+'>'+o[1]+'</option>';
+    chart='<div class="box"><h2>📈 กราฟค่าฝุ่นรายชั่วโมง</h2><div class="tabs"><select id="hm">'+
+      [["pm2_5","PM2.5"],["pm10","PM10"],["us_aqi","US AQI"]].map(o=>op(o,hm)).join("")+'</select><select id="hr">'+
+      [["p24","24 ชม.ที่ผ่านมา"],["f48","ตอนนี้ → 48 ชม."],["f5","ล่วงหน้าทั้งหมด"]].map(o=>op(o,hr)).join("")+
+      '</select></div><div id="ro"></div><div id="hc"></div><div class="note" style="margin-top:4px">แตะหรือลากบนกราฟเพื่อดูค่าแต่ละชั่วโมง เส้นประคือเกณฑ์สี</div></div>';
+  } else HD=null;
+
+  const legend='<div class="box legend"><h2>สีบอกระดับฝุ่น PM2.5 (µg/m³)</h2>'+
+    LEVELS.map(l=>'<div><span class="dot" style="background:'+l.c+'"></span><span><b>'+l.n+'</b> '+l.r+' · '+l.t+'</span></div>').join("")+'</div>';
+
+  const care='<div class="box care"><h2>✅ ดูแลตัวเองตอนนี้ ('+LV.t+')</h2><ul>'+
+    LV.care.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul></div>';
+
+  $("out").innerHTML=
+    '<div class="card"><div class="big">'+fmt(d.pm2_5)+'</div>'+
+    '<div class="unit">PM2.5 (µg/m³)</div>'+
+    '<div class="label">'+LV.t+'</div><div class="tip">'+LV.tip+'</div></div>'+
+    care+fc+chart+legend+
+    '<div class="grid">'+
+    '<div class="mini"><b>'+fmt(d.pm10)+'</b><span>PM10</span></div>'+
+    '<div class="mini"><b>'+fmt(d.us_aqi)+'</b><span>US AQI</span></div>'+
+    '<div class="mini"><b>'+fmt(d.ozone)+'</b><span>โอโซน</span></div>'+
+    '</div>'+
+    '<div class="box"><h2>ภาพรวมทุกสารมลพิษ (US AQI)</h2>'+
+    '<span class="pill" style="background:'+A.c+'">'+fmt(d.us_aqi)+' · '+A.t+'</span>'+
+    '<div style="margin-top:8px;color:var(--sub)">'+esc(why)+'</div></div>'+
+    HEALTH;
+  initChart();
+}
+
+/* ---------- โหลดข้อมูลของพิกัดที่เลือก ---------- */
+let reqId=0;
+let cur=null; // {lat,lon,name,gps}
+let stamp="";
+function setPlace(){ $("place").textContent=(cur&&cur.name?"📍 "+cur.name+" · ":"")+stamp; }
+
+async function show(c){
+  cur=c;
+  const my=++reqId;
+  mapGo(c.lat,c.lon);
+  const btn=$("refresh"); btn.disabled=true;
+  $("out").innerHTML='<div class="msg">กำลังโหลดข้อมูล…</div>';
+  try{
+    const keys=uniq(["us_aqi","pm2_5","pm10","ozone","nitrogen_dioxide","carbon_monoxide"].concat(POLL.map(p=>p.k)));
+    const url="https://air-quality-api.open-meteo.com/v1/air-quality?latitude="+c.lat+"&longitude="+c.lon+
+      "&current="+keys.join(",")+"&hourly=pm2_5,pm10,us_aqi&past_days=1&forecast_days=5&timezone=auto";
+    const data=await getJSON(url);
+    if(my!==reqId) return;
+    render(data);
+    stamp="อัปเดต "+data.current.time.replace("T"," ")+" น.";
+    setPlace();
+    try{localStorage.setItem("dust_last",JSON.stringify({lat:c.lat,lon:c.lon,name:c.name,gps:!!c.gps}));}catch(e){}
+    if(c.gps&&!c.name){
+      getJSON("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude="+c.lat+"&longitude="+c.lon+"&localityLanguage=th",8000)
+        .then(j=>{
+          const name=uniq([j.locality,j.city,j.principalSubdivision]).slice(0,2).join(", ");
+          if(name&&cur===c){c.name=name;setPlace();}
+        }).catch(()=>{});
+    }
+  }catch(e){
+    if(my!==reqId) return;
+    $("out").innerHTML='<div class="msg">โหลดข้อมูลไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วกดรีเฟรชอีกครั้ง</div>';
+  }
+  btn.disabled=false;
+}
+
+function useGPS(){
+  $("results").innerHTML="";
+  if(!navigator.geolocation){
+    $("out").innerHTML='<div class="msg">เบราว์เซอร์นี้ไม่รองรับการระบุตำแหน่ง ลองค้นหาด้วยชื่อจังหวัดหรืออำเภอแทน</div>';return;
+  }
+  $("out").innerHTML='<div class="msg">กำลังหาตำแหน่งของคุณ… (กดอนุญาตการเข้าถึงตำแหน่ง)</div>';
+  $("place").textContent="";
+  const g=++reqId;
+  navigator.geolocation.getCurrentPosition(pos=>{
+    if(g!==reqId) return;
+    show({lat:pos.coords.latitude,lon:pos.coords.longitude,name:"",gps:true});
+  },err=>{
+    if(g!==reqId) return;
+    const m=err&&err.code===1
+      ?'ไม่ได้รับอนุญาตให้ใช้ตำแหน่ง<br>เปิดการอนุญาตตำแหน่งให้เบราว์เซอร์ หรือค้นหาด้วยชื่อจังหวัด/อำเภอแทน'
+      :'หาตำแหน่งของคุณไม่เจอ<br>ตรวจสอบว่าเปิดบริการตำแหน่งที่ตั้งและอินเทอร์เน็ตอยู่ หรือค้นหาด้วยชื่อแทน';
+    $("out").innerHTML='<div class="msg">'+m+'</div>';
+  },{enableHighAccuracy:false,timeout:15000,maximumAge:300000});
+}
+/* ---------- ค้นหาชื่อสถานที่ ---------- */
+let found=[];
+async function search(q){
+  const box=$("results");
+  box.innerHTML='<div class="empty">กำลังค้นหา…</div>';
+  found=[];
+  try{
+    const j=await getJSON("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=th&accept-language=th&q="+encodeURIComponent(q));
+    found=j.map(x=>({
+      lat:(+x.lat).toFixed(4),lon:(+x.lon).toFixed(4),
+      name:uniq(x.display_name.split(", ").filter(s=>!/^\d+$/.test(s)&&s!=="ประเทศไทย")).slice(0,3).join(", ")
+    }));
+  }catch(e){}
+  if(!found.length){
+    try{
+      const j=await getJSON("https://geocoding-api.open-meteo.com/v1/search?count=6&language=th&countryCode=TH&name="+encodeURIComponent(q));
+      found=(j.results||[]).map(x=>({lat:x.latitude.toFixed(4),lon:x.longitude.toFixed(4),name:uniq([x.name,x.admin2,x.admin1]).join(", ")}));
+    }catch(e){}
+  }
+  box.innerHTML=found.length
+    ? found.map((r,i)=>'<button type="button" class="r" data-i="'+i+'">'+esc(r.name)+'</button>').join("")
+    : '<div class="empty">ไม่พบสถานที่นี้ ลองพิมพ์ชื่ออำเภอตามด้วยชื่อจังหวัด เช่น "แม่ริม เชียงใหม่"</div>';
+}
+
+$("sf").addEventListener("submit",e=>{e.preventDefault();const q=$("q").value.trim();if(q)search(q);});
+$("results").addEventListener("click",e=>{
+  const b=e.target.closest(".r"); if(!b) return;
+  const r=found[+b.dataset.i]; if(!r) return;
+  $("results").innerHTML=""; $("q").value="";
+  show({lat:r.lat,lon:r.lon,name:r.name});
+});
+$("gps").addEventListener("click",useGPS);
+$("refresh").addEventListener("click",()=>{ if(cur&&!cur.gps) show(cur); else useGPS(); });
+
+let last=null;
+try{last=JSON.parse(localStorage.getItem("dust_last")||"null");}catch(e){}
+if(last&&last.lat) show(last); else useGPS();
+</script>
+</body>
+</html>
