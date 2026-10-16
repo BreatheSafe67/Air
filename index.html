@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ค่าฝุ่น ค้นหาได้ทั้งจังหวัดและอำเภอ</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
 :root{--bg:#f4f6f8;--card:#fff;--text:#1b2733;--sub:#5f6f7e;--c:#999;--line:rgba(128,128,128,.25)}
 @media(prefers-color-scheme:dark){:root{--bg:#10161c;--card:#1a232c;--text:#e8eef3;--sub:#93a3b1}}
@@ -53,6 +54,16 @@ button.ghost{background:var(--card);color:var(--text);border:1px solid var(--lin
 .row button{margin-top:12px}
 .note{font-size:12px;color:var(--sub);margin-top:14px;line-height:1.5}
 .msg{padding:30px 10px;color:var(--sub);line-height:1.6}
+.msec{margin-top:24px}
+.msec h2{font-size:15px;margin:0 0 6px}
+#map{height:50vh;min-height:320px;border-radius:16px;overflow:hidden;z-index:0}
+.mrow{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:var(--sub)}
+.mrow input{flex:1;min-width:0}
+#hl{min-width:130px;text-align:right;color:var(--text);font-weight:600}
+.mlegend{display:flex;margin-top:8px;border-radius:8px;overflow:hidden;font-size:11px;color:#fff;text-align:center}
+.mlegend div{flex:1;padding:4px 2px}
+.mstatus{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.5}
+.leaflet-popup-content{font-size:14px;line-height:1.5;color:#1b2733}
 </style>
 </head>
 <body>
@@ -70,14 +81,21 @@ button.ghost{background:var(--card);color:var(--text);border:1px solid var(--lin
     <button id="gps" class="ghost">📍 ตำแหน่งของฉัน</button>
     <button id="refresh">รีเฟรช</button>
   </div>
-  <div class="note">ข้อมูลจากแบบจำลองคุณภาพอากาศ (Open-Meteo / CAMS) ความละเอียดราว 11 กม. ไม่ใช่ค่าจากเครื่องวัดตรงจุด อำเภอที่อยู่ใกล้กันมากอาจได้ค่าเท่ากัน ใช้ประกอบการตัดสินใจเท่านั้น<br>เกณฑ์สี PM2.5 อ้างอิงมาตรฐานค่าฝุ่นเฉลี่ย 24 ชม. ของไทย (37.5 µg/m³) ส่วน US AQI เป็นเกณฑ์สหรัฐฯ<br>ชื่อสถานที่จาก OpenStreetMap (Nominatim) และ Open-Meteo Geocoding</div>
+  <div class="msec">
+    <h2>🗺️ แผนที่ค่าฝุ่น</h2>
+    <div id="map"></div>
+    <div class="mrow"><span>เวลา</span><input type="range" id="hour" min="0" max="47" value="0"><span id="hl"></span></div>
+    <div class="mlegend" id="mlegend"></div>
+    <div class="mstatus" id="mstatus">แตะบนแผนที่เพื่อดูค่าฝุ่นของจุดนั้น</div>
+  </div>
+  <div class="note">ข้อมูลจากแบบจำลองคุณภาพอากาศ (Open-Meteo / CAMS) ความละเอียดราว 11 กม. ไม่ใช่ค่าจากเครื่องวัดตรงจุด อำเภอที่อยู่ใกล้กันมากอาจได้ค่าเท่ากัน ใช้ประกอบการตัดสินใจเท่านั้น สีบนแผนที่เป็นการประมาณเป็นช่วงๆ<br>เกณฑ์สี PM2.5 อ้างอิงมาตรฐานค่าฝุ่นเฉลี่ย 24 ชม. ของไทย (37.5 µg/m³) ส่วน US AQI เป็นเกณฑ์สหรัฐฯ<br>ชื่อสถานที่จาก OpenStreetMap (Nominatim) และ Open-Meteo Geocoding · แผนที่ © OpenStreetMap, © CARTO</div>
 </main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 window.addEventListener("error",function(e){
   var o=document.getElementById("out");
   if(o) o.innerHTML='<div class="msg">เกิดข้อผิดพลาดของสคริปต์:<br>'+String(e.message)+'</div>';
-});
-
+});  
 /* ===== 3 สี: เขียว / เหลือง / แดง (แก้เกณฑ์ที่ค่า max ตรงนี้ที่เดียว) ===== */
 const LEVELS=[
  {max:25,  c:"#2eb872", n:"เขียว",  r:"0–25",       t:"อากาศบริสุทธิ์",      tip:"ทำกิจกรรมกลางแจ้งได้ตามปกติ",
@@ -109,7 +127,7 @@ function uniq(a){return a.filter((x,i)=>x&&a.indexOf(x)===i);}
 
 function getJSON(url,ms){
   const ac=new AbortController(), t=setTimeout(()=>ac.abort(),ms||12000);
-  return fetch(url,{signal:ac.signal}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).finally(()=>clearTimeout(t));
+  return fetch(url,{signal:ac.signal}).then(r=>{if(!r.ok){const e=new Error(r.status);e.status=r.status;throw e;}return r.json();}).finally(()=>clearTimeout(t));
 }
 
 /* ===== ความรู้เรื่องสุขภาพกับ PM2.5 ===== */
@@ -125,7 +143,131 @@ const HEALTH=
  '<details><summary class="warn">อาการฉุกเฉิน โทร 1669 ทันที</summary><ul>'+
  '<li>หายใจลำบากมาก พูดไม่เป็นประโยค</li><li>เจ็บแน่นหน้าอกรุนแรง</li><li>ไอเป็นเลือด</li><li>ริมฝีปากหรือปลายนิ้วเขียวคล้ำ</li><li>หน้ามืด เป็นลม</li></ul></details>'+
  '<div class="note">ข้อมูลนี้เป็นความรู้เบื้องต้น ไม่ใช่การวินิจฉัยโรค หากมีอาการหรือกังวล ควรปรึกษาแพทย์</div></div>';
+/* ===== แผนที่ระบายสีค่าฝุ่น (ถ้าแผนที่พัง ส่วนอื่นยังใช้ได้) ===== */
+var mapGo=function(){};
+try{(function(){
+  const STEPS=[0.1,0.25,0.5,1,2,3,5,8,12,20];
+  function pickStep(span){
+    const target=span/6;
+    return STEPS.find(s=>s>=target)||STEPS[STEPS.length-1];
+  }
+  function r3(x){return Math.round(x*1000)/1000;}
+  function makeGrid(south,north,west,east){
+    let step=pickStep(Math.max(north-south,(east-west)/1.4));
+    let pts;
+    for(let guard=0;guard<10;guard++){
+      pts=[];
+      const la0=Math.max(-85,Math.floor(south/step)*step-step), la1=Math.min(85,Math.ceil(north/step)*step+step);
+      const lo0=Math.max(-180,Math.floor(west/step)*step-step), lo1=Math.min(180,Math.ceil(east/step)*step+step);
+      for(let la=la0;la<=la1+1e-9;la+=step){
+        for(let lo=lo0;lo<=lo1+1e-9;lo+=step){pts.push({lat:r3(la),lon:r3(lo)});}
+      }
+      if(pts.length<=80) break;
+      const i=STEPS.indexOf(step);
+      step=STEPS[Math.min(STEPS.length-1,i+1)];
+    }
+    return {step:step,pts:pts};
+  }
+  /*MAP*/
+  const API="https://air-quality-api.open-meteo.com/v1/air-quality";
+  const dark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const map=L.map("map",{minZoom:3,maxZoom:10,worldCopyJump:false,maxBounds:[[-85,-180],[85,180]],maxBoundsViscosity:1}).setView([13.5,101],6);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/"+(dark?"dark_all":"light_all")+"/{z}/{x}/{y}{r}.png",{
+    attribution:"&copy; OpenStreetMap &copy; CARTO",subdomains:"abcd",maxZoom:19
+  }).addTo(map);
+  map.createPane("cells");
+  const cp=map.getPane("cells"); cp.style.zIndex=350; cp.style.opacity=".62"; cp.style.filter="blur(7px)"; cp.style.pointerEvents="none";
+  const rend=L.svg({pane:"cells",padding:0.5});
+  const cellLayer=L.layerGroup().addTo(map);
+  let pin=null, cache={}, times=[], hourIdx=0, nowIdx=0, curGrid=null, token=0, timer=null;
 
+  $("mlegend").innerHTML=LEVELS.map(l=>'<div style="background:'+l.c+'">'+l.n+' '+l.r+'</div>').join("");
+  const idle="แตะบนแผนที่เพื่อดูค่าฝุ่นของจุดนั้น";
+
+  function fmtTime(t){
+    const d=new Date(t+":00Z");
+    return d.toLocaleString("th-TH",{weekday:"short",hour:"2-digit",minute:"2-digit"})+" น.";
+  }
+  function updateLabel(){
+    $("hl").textContent=times.length?(hourIdx===nowIdx?"ตอนนี้ · ":"")+fmtTime(times[hourIdx]):"";
+  }
+  function draw(){
+    cellLayer.clearLayers();
+    if(!curGrid) return;
+    const s=curGrid.step;
+    curGrid.pts.forEach(p=>{
+      const arr=cache[s+"|"+p.lat+","+p.lon];
+      const v=arr&&arr[hourIdx];
+      if(v==null) return;
+      L.rectangle([[p.lat-s/2,p.lon-s/2],[p.lat+s/2,p.lon+s/2]],
+        {renderer:rend,stroke:false,fillColor:lv(v).c,fillOpacity:1,interactive:false}).addTo(cellLayer);
+    });
+  }
+  async function refreshGrid(){
+    const b=map.getBounds();
+    curGrid=makeGrid(b.getSouth(),b.getNorth(),b.getWest(),b.getEast());
+    const s=curGrid.step;
+    const need=curGrid.pts.filter(p=>!cache[s+"|"+p.lat+","+p.lon]);
+    const my=++token;
+    draw();
+    if(!need.length){$("mstatus").textContent=idle;return;}
+    $("mstatus").textContent="กำลังโหลดข้อมูลบนแผนที่…";
+    try{
+      for(let i=0;i<need.length;i+=40){
+        const ch=need.slice(i,i+40);
+        const url=API+"?latitude="+ch.map(p=>p.lat).join(",")+"&longitude="+ch.map(p=>p.lon).join(",")+
+          "&hourly=pm2_5&forecast_days=2&timezone=GMT";
+        const j=await getJSON(url,20000);
+        const arr=Array.isArray(j)?j:[j];
+        arr.forEach((o,k)=>{
+          if(o&&o.hourly){
+            cache[s+"|"+ch[k].lat+","+ch[k].lon]=o.hourly.pm2_5;
+            if(!times.length){
+              times=o.hourly.time;
+              const f=times.indexOf(new Date().toISOString().slice(0,13)+":00");
+              nowIdx=f<0?0:f; hourIdx=nowIdx;
+              $("hour").max=times.length-1; $("hour").value=hourIdx;
+            }
+          }
+        });
+        if(my!==token) return;
+        updateLabel(); draw();
+      }
+      $("mstatus").textContent=idle;
+    }catch(e){
+      $("mstatus").textContent=e&&e.status===429?"ใช้งานถี่เกินไป รอสักครู่แล้วลองเลื่อนแผนที่อีกครั้ง":"โหลดข้อมูลแผนที่ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ต";
+    }
+  }
+  function scheduleRefresh(){clearTimeout(timer);timer=setTimeout(refreshGrid,500);}
+  map.on("moveend",scheduleRefresh);
+  $("hour").addEventListener("input",e=>{hourIdx=+e.target.value;updateLabel();draw();});
+
+  async function showPoint(lat,lon){
+    const pop=L.popup().setLatLng([lat,lon]).setContent("กำลังโหลด…").openOn(map);
+    try{
+      const nmP=getJSON("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude="+lat+"&longitude="+lon+"&localityLanguage=th",8000)
+        .then(j=>uniq([j.locality,j.city,j.principalSubdivision,j.countryName]).slice(0,2).join(", ")).catch(()=>"");
+      const [j,nm]=await Promise.all([
+        getJSON(API+"?latitude="+lat+"&longitude="+lon+"&current=pm2_5,pm10,us_aqi&timezone=auto"),nmP]);
+      const c=j.current, V=lv(c.pm2_5);
+      pop.setContent((nm?'<b>'+esc(nm)+'</b><br>':'')+
+        'PM2.5 <b style="color:'+V.c+'">'+fmt(c.pm2_5)+'</b> µg/m³ · '+V.t+'<br>PM10 '+fmt(c.pm10)+' · US AQI '+fmt(c.us_aqi)+
+        '<br><span style="color:#777;font-size:12px">ค่าตอนนี้ (แบบจำลอง)</span>');
+    }catch(e){pop.setContent("โหลดค่าไม่สำเร็จ ลองใหม่อีกครั้ง");}
+  }
+  map.on("click",e=>showPoint(r3(e.latlng.lat),r3(e.latlng.lng)));
+
+  mapGo=function(lat,lon){
+    const p=[+lat,+lon];
+    map.setView(p,9);
+    if(pin) pin.setLatLng(p);
+    else pin=L.circleMarker(p,{radius:7,color:"#fff",weight:2,fillColor:"#2f80ed",fillOpacity:1,interactive:false}).addTo(map);
+  };
+  scheduleRefresh();
+})();}catch(e){
+  var ms=document.getElementById("mstatus");
+  if(ms) ms.textContent="โหลดแผนที่ไม่สำเร็จ (ตรวจสอบอินเทอร์เน็ต) ส่วนค่าฝุ่นด้านบนยังใช้ได้";
+}  
 function render(data){
   const d=data.current, h=data.hourly;
   const L=lv(d.pm2_5), A=aq(d.us_aqi);
@@ -182,6 +324,7 @@ function setPlace(){ $("place").textContent=(cur&&cur.name?"📍 "+cur.name+" ·
 
 async function show(c){
   cur=c;
+  mapGo(c.lat,c.lon);
   const btn=$("refresh"); btn.disabled=true;
   $("out").innerHTML='<div class="msg">กำลังโหลดข้อมูล…</div>';
   try{
@@ -222,7 +365,6 @@ function useGPS(){
     $("out").innerHTML='<div class="msg">'+m+'</div>';
   },{enableHighAccuracy:false,timeout:15000,maximumAge:300000});
 }
-
 /* ---------- ค้นหาชื่อสถานที่ ---------- */
 let found=[];
 async function search(q){
